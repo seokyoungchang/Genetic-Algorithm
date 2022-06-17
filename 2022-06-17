@@ -22,26 +22,173 @@ title:  "회귀식 정렬(유전 알고리즘) "
 변이를 사용하지 않은면 선택과 교차 연산을 반복하다가 어느새부터 위 과정이 동질적인 해집단에서 정체될 수 있다. 탐색 알고리즘이 효율적으로 진행되지 못하기 때문에 평균 적합도가 향상되지 않는다. 그러면 평균 적합도 변화율이 정체되고, 최적해가 나온 것처럼 보일 수 있다. 변이는 임의 탐색과 동긍한 효과를 주며 유전적 다양성을 잃지 않게 한다.
 변이 연산은 염색체에서 임의로 선택한 유전자를 뒤집는다. 예를 들어 염색체의 특정 유전자를 0 -> 1처럼 반대로 바꾼다. 변이는 모든 유전자에 일정한 확률로 일어날 수 있다. 변이율은 자연계에서도 꽤 낮기도 하고, 프로그래밍시 높게 잡으면 안좋은 결과를 만들 가능성도 커지기 때문에 보통 0.001 ~ 0.01 사이의 낮은 수치로 정한다.
 
-3.1. 초기 염색체 생성 연산
+1.초기 염색체 생성 연산
 
 초기에는 이전 염색체가 존재하지 않기 때문에 선택된 염색체들로부터 자손을 생성할 수가 없다. 따라서, 초기 염색체를 생성하는 연산을 별도로 정의해야 한다. 유전 알고리즘에서 가장 많이 이용되는 방법은 어떠한 규칙도 없이 단순히 임의의 값으로 염색체를 생성하는 것이다. 예를 들어, 자바로 작성된 [코드 1]과 같은 소스 코드는 유전 알고리즘의 초기 염색체 생성 연산으로 이용될 수 있다.
 
 ```c
-Random rand = new Random();
-int[] chromosome = new int[SIZE_CHROMOSOME];
- 
-for(int i = 0; i < SIZE_CHROMOSOME; i++) {
-    chromosome[i] = rand.nextInt(MAX_VAL_GENE);
-}
+def _generate_parent(length, geneSet, get_fitness):
+chromosome_list = []
+for i in range(0, 10):
+    genes = []
+    while len(genes) < length:
+        sampleSize = min(length - len(genes), len(geneSet))
+        genes.extend(random.sample(geneSet, sampleSize))
+    fitness = get_fitness(genes)
+    chromosome_list.append(Chromosome(genes, fitness))
+return chromosome_list
 ```
+염색체를 10개정도 생성하여, 리스트에 저장한다. 이때 유전자의 배열은 0부터 9까지 사이 숫자의 랜덤 값이다.
 
-3.4. 선택된 염색체들로부터 자손을 생성하는 연산
+2.적합도를 계산하는 연산
 유전 알고리즘에서는 자손을 생성하는 연산으로 주로 crossover라는 연산을 이용한다. Crossover 연산을 그림으로 표현하면, 아래의 [그림 2]와 같다.
 
 ![image]https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=http%3A%2F%2Fcfile6.uf.tistory.com%2Fimage%2F2204125057DBC01320BE0C
 
-3.5. 돌연변이 (mutation) 연산
+```c
+ def get_fitness(guess, target):
+fitness = 0
+for expected, actual in zip(target, guess):
+    if expected == actual:
+        fitness += 5
+    elif actual in target:
+        fitness += 1
 
-만약, 앞에서 설명한 4-3, 4-4와 같은 연산을 이용해서 검색을 진행하면, 유전 알고리즘은 지역 최적점에 도달하게 될 것이다. 유전 알고리즘에서는 지역 최적점에 빠지는 문제를 해결하기 위해 새롭게 생성된 염색체에 확률적으로 돌연변이가 발생하도록 한다. 일반적으로 0.1%, 0.05% 등의 아주 낮은 확률로 돌연변이가 발생하도록 설정하며, 염색체에서 돌연변이를 발생시키는 연산은 매우 다양하다. 예를 들어, [그림 2]에서 생성된 자손에 대해 아래의 [그림 3]과 같은 두 개의 돌연변이 연산을 정의할 수 있다.
+return fitness
+```
+
+3.적합도를 기준으로 염색체를 선택하는 연산
+
+```c
+ def _generate_child(parent_list, geneSet, get_fitness):
+child_list = []
+fitness_percent_list = []
+fitness_accum_list = []
+fitness_sum = 0
+for parent in parent_list:
+    fitness_sum += parent.Fitness
+
+for parent in parent_list:
+    fitness_percent_list.append(parent.Fitness / fitness_sum)
+
+fitness_sum = 0
+for fitness_percent in fitness_percent_list:
+    fitness_sum += fitness_percent
+    fitness_accum_list.append(fitness_sum)
+
+# Selection
+for i in range(0, 10):
+    rand = random.random()
+    before = 0
+    for j in range(0, len(fitness_accum_list)):
+        if rand > before and rand <= fitness_accum_list[j]:
+            child_list.append(copy.deepcopy(parent_list[j]))
+            break
+        before = fitness_accum_list[j]
+
+```
+
+부모들로부터 계산된 적합도 값을 모두 더한 후, 백분율로 환산하여 축적하여 저장한다. 이후 난수를 돌려서 걸린 염색체를 자식 염색체로 지정한다. 룰렛 휠 방식이다.
+
+선택된 염색체들로부터 자손을 생성하는 연산
+
+```c
+ def _generate_child(parent_list, geneSet, get_fitness):
+
+crossover_rate = 0.20
+selected = None
+for i in range(0, len(child_list)):
+    rand = random.random()
+    if rand < crossover_rate:
+        if selected is None:
+            selected = i
+        else:
+            child_list[selected].Genes[2:], child_list[i].Genes[2:] = \
+                child_list[i].Genes[2:], child_list[selected].Genes[2:]
+            selected = None
+            
+    child_list[i].Fitness = get_fitness(child_list[i].Genes)
+```
+
+선택한 염색체 중 랜덤으로 선택하여 유전자를 교배 시킨다. 즉 숫자의 일부를 두 유전자끼리 교환시킨다.
+
+돌연변이 연산
+
+```c
+def _generate_child(parent_list, geneSet, get_fitness):
+mutate_rate = 0.2
+for i in range(0, len(child_list)):
+    rand = random.random()
+    if rand < mutate_rate:
+        child = _mutate(child_list[i], geneSet, get_fitness)
+        del child_list[i]
+        child_list.append(child)
+return child_list
+```
+
+기존의 염색체들로만 교배를 한다면 지역 최적점, 즉 원하는 값에 도달할 수가 없기 때문에, 광역 최적점에 도달하기 위해서는 돌연변이 연산을 섞어줘야 한다. 일정 확률로 돌연변이를 발생 시킨 후, 유전자의 일부를 치환하였다.
 
 ![image]https://img1.daumcdn.net/thumb/R1280x0/?scode=mtistory2&fname=http%3A%2F%2Fcfile24.uf.tistory.com%2Fimage%2F236D374857DBC2AF2C3A50
+
+결과 값
+```c
+target : 841532
+820653	1/3	8	0:00:00.000997
+491670	1/1	6	0:00:00.000997
+763810	0/3	3	0:00:00.000997
+642183	1/4	9	0:00:00.000997
+702563	1/2	7	0:00:00.000997
+721048	1/3	8	0:00:00.000997
+978064	0/2	2	0:00:00.000997
+543081	1/4	9	0:00:00.000997
+841530	5/0	25	0:00:00.000997
+493157	0/4	4	0:00:00.000997
+average fitness : 8.1
+new maximum fitness : 9.1
+new maximum fitness : 13.6
+new maximum fitness : 17.2
+...중략...
+new maximum fitness : 29.2
+new maximum fitness : 29.6
+new maximum fitness : 30.0
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+841532	6/0	30	0:00:00.038933
+average fitness : 30.0
+
+ target : 495367
+450791	1/3	8	0:00:00
+315478	1/3	8	0:00:00
+068147	1/2	7	0:00:00
+598437	2/3	13	0:00:00
+385704	1/3	8	0:00:00
+623759	0/5	5	0:00:00
+253147	1/3	8	0:00:00
+548967	2/3	13	0:00:00
+067142	0/3	3	0:00:00
+431768	2/2	12	0:00:00
+average fitness : 8.5
+new maximum fitness : 9.5
+new maximum fitness : 11.0
+...중략...
+new maximum fitness : 29.1
+new maximum fitness : 30.0
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+495367	6/0	30	0:00:00.025973
+average fitness : 30.0
+```
